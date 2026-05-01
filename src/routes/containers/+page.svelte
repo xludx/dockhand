@@ -470,6 +470,9 @@
 				// Full env switch — invalidate cache, show spinner
 				containerStore.invalidate();
 			}
+			// Subscribe to hawser reconnect events so stale container IDs are
+			// cleared immediately when the agent reconnects
+			containerStore.connectReconnectSSE(newEnvId);
 			// Refresh data (store handles loading state internally)
 			containerStore.refresh(newEnvId);
 			loadIconOverrides(newEnvId);
