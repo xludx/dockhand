@@ -1,0 +1,19 @@
+when:
+  - event: push
+    branch: main
+  - event: manual
+
+steps:
+  build:
+    image: woodpeckerci/plugin-docker-buildx
+    settings:
+      repo: registry.kcolb.com/ludx/dockhand
+      registry: registry.kcolb.com
+      username:
+        from_secret: registry_username
+      password:
+        from_secret: registry_password
+      tags: latest
+      platforms:
+        - linux/amd64
+        - linux/arm64
