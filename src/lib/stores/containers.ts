@@ -54,6 +54,9 @@ function createContainerStore() {
 	let fetchingContainers = false;
 	let fetchingStats = false;
 
+	// SSE connection for hawser reconnection events
+	let reconnectEventSource: EventSource | null = null;
+
 	function patch(partial: Partial<ContainerStoreState>) {
 		update((s) => ({ ...s, ...partial }));
 	}
@@ -289,6 +292,50 @@ function createContainerStore() {
 		}
 	}
 
+	/**
+	 * Subscribe to hawser reconnect events for this environment.
+	 * When the hawser agent reconnects (e.g. after containers are recreated),
+	 * we clear stale container IDs and re-fetch fresh data so stats polling
+	 * doesn't request non-existent containers.
+	 */
+	function connectReconnectSSE(envId: number | null) {
+		// Close any existing SSE connection first
+		reconnectEventSource?.close();
+		reconnectEventSource = null;
+
+		if (!browser || !envId) return;
+
+		const es = new EventSource(`/api/hawser/reconnect?env=${envId}`);
+		reconnectEventSource = es;
+
+		es.addEventListener('hawser_reconnect', () => {
+			const state = get({ subscribe });
+			// Only act if we're still watching this environment
+			if (state.envId !== envId) return;
+
+			console.log(`[ContainerStore] Hawser reconnected for env ${envId} — clearing stale container IDs`);
+
+			// Clear stats cache so no stale IDs are used in the next poll cycle
+			update((s) => ({
+				...s,
+				stats: new Map(),
+				previousStats: new Map()
+			}));
+
+			// Abort any in-flight stats stream (it's using stale container IDs)
+			statsAbortController?.abort();
+			fetchingStats = false;
+
+			// Re-fetch fresh container list and stats
+			fetchContainersInternal(envId);
+			fetchStatsInternal(envId);
+		});
+
+		es.addEventListener('error', () => {
+			// EventSource auto-reconnects on error — no action needed
+		});
+	}
+
 	return {
 		subscribe,
 
@@ -318,6 +365,8 @@ function createContainerStore() {
 
 		/** Clear all data (environment switch) */
 		invalidate() {
+			reconnectEventSource?.close();
+			reconnectEventSource = null;
 			statsAbortController?.abort();
 			fetchingStats = false;
 			set({
@@ -328,6 +377,8 @@ function createContainerStore() {
 
 		/** Clear data without loading state (no environment selected) */
 		clear() {
+			reconnectEventSource?.close();
+			reconnectEventSource = null;
 			statsAbortController?.abort();
 			fetchingStats = false;
 			set({ ...INITIAL_STATE, loading: false });
@@ -337,6 +388,13 @@ function createContainerStore() {
 		setPendingUpdates(ids: string[], names: Map<string, string>) {
 			patch({ pendingUpdateIds: ids, pendingUpdateNames: names });
 		},
+
+		/**
+		 * Start listening for hawser reconnect events for this environment.
+		 * Call this when the environment is selected. The SSE connection is
+		 * automatically closed on invalidate() / clear().
+		 */
+		connectReconnectSSE,
 
 		/** Patch arbitrary fields */
 		patch

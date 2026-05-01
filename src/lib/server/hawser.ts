@@ -458,6 +458,13 @@ export function handleEdgeConnection(
 		} else {
 			existing.ws.close(1000, 'Replaced by new connection');
 		}
+
+		// Notify frontend to invalidate its container cache for this environment.
+		// When containers are recreated they get new IDs; stale IDs cause stats
+		// requests to fail, which drops the connection and triggers a reconnection
+		// storm. Emitting this event lets the UI clear the cache and re-fetch fresh
+		// container IDs before any stats polling begins.
+		containerEventEmitter.emit('hawser_reconnect', { environmentId });
 	}
 
 	const connection: EdgeConnection = {
