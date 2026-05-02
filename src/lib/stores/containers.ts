@@ -315,16 +315,22 @@ function createContainerStore() {
 
 			console.log(`[ContainerStore] Hawser reconnected for env ${envId} — clearing stale container IDs`);
 
-			// Clear stats cache so no stale IDs are used in the next poll cycle
+			// Clear container list and stats so the UI shows a loading state
+			// rather than stale data while fresh data is being fetched.
+			// Without clearing data here, fetchContainersInternal sees data.length > 0
+			// and skips the loading spinner, causing stale containers to flash briefly.
 			update((s) => ({
 				...s,
+				data: [],
 				stats: new Map(),
-				previousStats: new Map()
+				previousStats: new Map(),
+				loading: true
 			}));
 
 			// Abort any in-flight stats stream (it's using stale container IDs)
 			statsAbortController?.abort();
 			fetchingStats = false;
+			fetchingContainers = false;
 
 			// Re-fetch fresh container list and stats
 			fetchContainersInternal(envId);
