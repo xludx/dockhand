@@ -1163,8 +1163,17 @@ async function handleHawserWsMessage(ws: any, msg: any, connId: string, remoteIp
 				return;
 			}
 
-			// Throttle reconnection storms (successful auth but broken Docker = rapid reconnect loop)
-			const throttle = recordReconnection(result.environmentId);
+			// Throttle reconnection storms (successful auth but broken Docker = rapid reconnect loop).
+			// Skip the counter when an idle connection is being replaced within 5s of connecting —
+			// this is the hawser agent's normal dual-connection startup pattern, not a storm.
+			const existingConn = edgeConnections.get(result.environmentId);
+			const isIdleReplacement = existingConn &&
+				existingConn.pendingRequests.size === 0 &&
+				existingConn.pendingStreamRequests.size === 0 &&
+				(Date.now() - existingConn.connectedAt.getTime()) < 5000;
+			const throttle = isIdleReplacement
+				? { allowed: true as const }
+				: recordReconnection(result.environmentId);
 			if (!throttle.allowed) {
 				console.log(`[Hawser WS] Throttling reconnection for env ${result.environmentId}: retry after ${throttle.retryAfter}s`);
 				ws.send(JSON.stringify({
