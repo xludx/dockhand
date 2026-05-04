@@ -755,7 +755,13 @@
 				}
 			}
 
-			stacks = dockerStacks;
+			// Only replace stacks if we got a non-empty result. An empty array
+			// usually means the hawser connection was mid-replacement and
+			// listContainers returned []. Keeping the last good result prevents
+			// the stack list from flickering to empty/partial during reconnects.
+			if (dockerStacks.length > 0) {
+				stacks = dockerStacks;
+			}
 
 			// Fetch env var counts for internal and git stacks (in background, don't block UI)
 			const allStackNames = stacks.map(s => s.name);
