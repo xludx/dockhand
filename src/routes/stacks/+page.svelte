@@ -755,11 +755,26 @@
 				}
 			}
 
-			// Only replace stacks if we got a non-empty result. An empty array
-			// usually means the hawser connection was mid-replacement and
-			// listContainers returned []. Keeping the last good result prevents
-			// the stack list from flickering to empty/partial during reconnects.
-			if (dockerStacks.length > 0) {
+			// Guard against stale/partial hawser data during reconnect windows.
+			// If we already have stack data, only accept the new result if it's at least
+			// as healthy as what we have. Specifically: don't downgrade a running stack
+			// to partial/stopped unless the container count actually changed (containers
+			// were added or removed), which would indicate a real state change rather
+			// than a mid-replacement snapshot with stale container states.
+			if (stacks.length > 0 && dockerStacks.length > 0) {
+				const prevById = new Map(stacks.map(s => [s.name, s]));
+				const degraded = dockerStacks.some(s => {
+					const prev = prevById.get(s.name);
+					if (!prev) return false; // new stack, always accept
+					const sameCount = s.containers.length === prev.containers.length;
+					const wasRunning = prev.status === 'running';
+					const nowWorse = s.status === 'partial' || s.status === 'stopped' || (s.status as string) === 'created';
+					return sameCount && wasRunning && nowWorse;
+				});
+				if (!degraded) {
+					stacks = dockerStacks;
+				}
+			} else if (dockerStacks.length > 0) {
 				stacks = dockerStacks;
 			}
 
