@@ -54,6 +54,10 @@ function createContainerStore() {
 	let fetchingContainers = false;
 	let fetchingStats = false;
 
+	// After a hawser reconnect, pause stats polling briefly to let the new
+	// connection stabilise before hammering it with requests again.
+	let statsBackoffUntil = 0;
+
 	// SSE connection for hawser reconnection events
 	let reconnectEventSource: EventSource | null = null;
 
@@ -207,6 +211,7 @@ function createContainerStore() {
 
 	async function fetchStatsInternal(envId: number | null) {
 		if (!browser || !envId || fetchingStats) return;
+		if (Date.now() < statsBackoffUntil) return;
 		fetchingStats = true;
 
 		// Abort any previous in-flight stream
@@ -332,9 +337,15 @@ function createContainerStore() {
 			fetchingStats = false;
 			fetchingContainers = false;
 
-			// Re-fetch fresh container list and stats
+			// Back off stats polling for 10s to let the new hawser connection
+			// stabilise before we start hammering it with stats requests again.
+			// Without this, the 5s poll interval fires repeatedly during the
+			// reconnect window and can trigger a reconnection storm.
+			statsBackoffUntil = Date.now() + 10000;
+
+			// Re-fetch fresh container list and stats after the backoff
 			fetchContainersInternal(envId);
-			fetchStatsInternal(envId);
+			setTimeout(() => fetchStatsInternal(envId), 10000);
 		});
 
 		es.addEventListener('error', () => {
