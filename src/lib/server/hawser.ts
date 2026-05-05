@@ -1147,13 +1147,13 @@ async function handleHawserWsMessage(ws: any, msg: any, connId: string, remoteIp
 		const lastFail = hawserAuthFailCache.get(rateLimitKey);
 		if (lastFail && Date.now() - lastFail < HAWSER_AUTH_FAIL_COOLDOWN_MS) {
 			console.log(`[Hawser WS] Rate limited ${connId} (IP: ${rateLimitKey}) — ${Math.round((Date.now() - lastFail) / 1000)}s since last fail`);
-			ws.send(JSON.stringify({ type: 'error', message: 'Too many failed attempts' }));
+			ws.send(JSON.stringify({ type: 'error', error: 'Too many failed attempts' }));
 			ws.close(1008, 'Rate limited');
 			return;
 		}
 
 		if (!msg.token) {
-			ws.send(JSON.stringify({ type: 'error', message: 'No token provided' }));
+			ws.send(JSON.stringify({ type: 'error', error: 'No token provided' }));
 			ws.close(1008, 'Missing token');
 			return;
 		}
@@ -1163,7 +1163,7 @@ async function handleHawserWsMessage(ws: any, msg: any, connId: string, remoteIp
 			if (!result.valid || !result.environmentId) {
 				console.log(`[Hawser WS] Authentication failed for connection ${connId} (IP: ${rateLimitKey})`);
 				hawserAuthFailCache.set(rateLimitKey, Date.now());
-				ws.send(JSON.stringify({ type: 'error', message: 'Invalid token' }));
+				ws.send(JSON.stringify({ type: 'error', error: 'Invalid token' }));
 				ws.close(1008, 'Invalid token');
 				return;
 			}
@@ -1177,7 +1177,7 @@ async function handleHawserWsMessage(ws: any, msg: any, connId: string, remoteIp
 				console.log(`[Hawser WS] Throttling reconnection for env ${result.environmentId}: retry after ${throttle.retryAfter}s`);
 				ws.send(JSON.stringify({
 					type: 'error',
-					message: `Reconnection throttled. Retry after ${throttle.retryAfter}s.`,
+					error: `Reconnection throttled. Retry after ${throttle.retryAfter}s.`,
 					retryAfter: throttle.retryAfter
 				}));
 				ws.close(1008, 'Reconnection throttled');
@@ -1220,7 +1220,7 @@ async function handleHawserWsMessage(ws: any, msg: any, connId: string, remoteIp
 			console.log(`[Hawser WS] Agent authenticated: env=${result.environmentId} agent=${msg.agentName || msg.agentId}`);
 		} catch (error: any) {
 			console.error('[Hawser WS] Auth error:', error.message);
-			ws.send(JSON.stringify({ type: 'error', message: 'Authentication failed' }));
+			ws.send(JSON.stringify({ type: 'error', error: 'Authentication failed' }));
 			ws.close(1011, 'Auth error');
 		}
 		return;
@@ -1229,7 +1229,7 @@ async function handleHawserWsMessage(ws: any, msg: any, connId: string, remoteIp
 	// All other messages require an authenticated connection
 	const envId = wsToEnvId.get(ws);
 	if (!envId) {
-		ws.send(JSON.stringify({ type: 'error', message: 'Not authenticated' }));
+		ws.send(JSON.stringify({ type: 'error', error: 'Not authenticated' }));
 		return;
 	}
 
