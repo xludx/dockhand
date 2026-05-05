@@ -1187,11 +1187,16 @@ async function handleHawserWsMessage(ws: any, msg: any, connId: string, remoteIp
 			wsToEnvId.set(ws, result.environmentId);
 
 			// Send welcome
-			ws.send(JSON.stringify({
-				type: 'welcome',
-				serverId: 'dockhand',
-				version: HAWSER_PROTOCOL_VERSION
-			}));
+			try {
+				ws.send(JSON.stringify({
+					type: 'welcome',
+					serverId: 'dockhand',
+					version: HAWSER_PROTOCOL_VERSION
+				}));
+				console.log(`[Hawser WS] Welcome message sent successfully to env=${result.environmentId}`);
+			} catch (sendError: any) {
+				console.error(`[Hawser WS] Failed to send welcome to env=${result.environmentId}:`, sendError.message);
+			}
 
 			console.log(`[Hawser WS] Agent authenticated: env=${result.environmentId} agent=${msg.agentName || msg.agentId}`);
 		} catch (error: any) {
