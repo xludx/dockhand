@@ -445,15 +445,25 @@ function handleHawserConnection(ws, connId, remoteIp) {
 		}
 	});
 
-	ws.on('close', () => {
+	ws.on('close', (code, reason) => {
+		console.log(`[Hawser WS] Connection ${connId} closed: code=${code}, reason=${reason || 'none'}`);
 		if (typeof globalThis.__hawserHandleDisconnect === 'function') {
 			globalThis.__hawserHandleDisconnect(ws, connId);
 		}
 	});
 
 	ws.on('error', (err) => {
-		console.error('[Hawser WS] Connection error:', err.message);
+		console.error(`[Hawser WS] Connection ${connId} WebSocket error:`, err.message);
 	});
+
+	// Detect TCP-level closes (1006 errors) - listen to underlying socket
+	try {
+		ws._socket?.on('close', (hadError) => {
+			console.log(`[Hawser WS] Connection ${connId} TCP socket closed: hadError=${hadError}`);
+		});
+	} catch (e) {
+		// Socket might not be available yet, ignore
+	}
 }
 
 // Start the server
