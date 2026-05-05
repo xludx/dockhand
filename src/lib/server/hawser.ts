@@ -1186,17 +1186,33 @@ async function handleHawserWsMessage(ws: any, msg: any, connId: string, remoteIp
 			const connection = handleEdgeConnection(ws, result.environmentId, msg);
 			wsToEnvId.set(ws, result.environmentId);
 
-			// Send welcome
-			try {
-				ws.send(JSON.stringify({
-					type: 'welcome',
-					serverId: 'dockhand',
-					version: HAWSER_PROTOCOL_VERSION
-				}));
-				console.log(`[Hawser WS] Welcome message sent successfully to env=${result.environmentId}`);
-			} catch (sendError: any) {
-				console.error(`[Hawser WS] Failed to send welcome to env=${result.environmentId}:`, sendError.message);
-			}
+			// Send welcome with delay for DERP relay stability
+			// DERP-relayed connections need time to stabilize before first message
+			setTimeout(() => {
+				let retryCount = 0;
+				const maxRetries = 3;
+
+				const sendWelcome = () => {
+					try {
+						ws.send(JSON.stringify({
+							type: 'welcome',
+							serverId: 'dockhand',
+							version: HAWSER_PROTOCOL_VERSION
+						}));
+						console.log(`[Hawser WS] Welcome message sent successfully to env=${result.environmentId} (retry ${retryCount})`);
+					} catch (sendError: any) {
+						retryCount++;
+						if (retryCount < maxRetries) {
+							console.warn(`[Hawser WS] Welcome send failed (attempt ${retryCount}/${maxRetries}) for env=${result.environmentId}: ${sendError.message}, retrying...`);
+							setTimeout(sendWelcome, 100 * retryCount); // Exponential backoff: 100ms, 200ms, 400ms
+						} else {
+							console.error(`[Hawser WS] Failed to send welcome to env=${result.environmentId} after ${maxRetries} attempts:`, sendError.message);
+						}
+					}
+				};
+
+				sendWelcome();
+			}, 100); // 100ms delay for DERP relay stabilization
 
 			console.log(`[Hawser WS] Agent authenticated: env=${result.environmentId} agent=${msg.agentName || msg.agentId}`);
 		} catch (error: any) {
