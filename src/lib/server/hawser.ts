@@ -484,6 +484,7 @@ export function handleEdgeConnection(
 	tokenId?: number
 ): EdgeConnection {
 	// Check if there's already a connection for this environment
+	console.log(`[Hawser] handleEdgeConnection: env=${environmentId}, agent=${hello.agentName || hello.agentId}`);
 	const existing = edgeConnections.get(environmentId);
 	if (existing) {
 		const pendingCount = existing.pendingRequests.size;
@@ -1243,16 +1244,10 @@ async function handleHawserWsMessage(ws: any, msg: any, connId: string, remoteIp
 			hawserAuthFailCache.delete(rateLimitKey);
 
 			// Throttle reconnection storms (successful auth but broken Docker = rapid reconnect loop).
-			// Skip the counter when an idle connection is being replaced within 5s of connecting —
-			// this is the hawser agent's normal dual-connection startup pattern, not a storm.
+			// DISABLED: Idle replacement bypass was causing rapid reconnection storms.
+			// Now all reconnections go through storm tracking to prevent rapid replacement cycles.
 			const existingConn = edgeConnections.get(result.environmentId);
-			const isIdleReplacement = existingConn &&
-				existingConn.pendingRequests.size === 0 &&
-				existingConn.pendingStreamRequests.size === 0 &&
-				(Date.now() - existingConn.connectedAt.getTime()) < 5000;
-			const throttle = isIdleReplacement
-				? { allowed: true as const }
-				: recordReconnection(result.environmentId);
+			const throttle = recordReconnection(result.environmentId);
 			if (!throttle.allowed) {
 				console.log(`[Hawser WS] Throttling reconnection for env ${result.environmentId}: retry after ${throttle.retryAfter}s`);
 				ws.send(JSON.stringify({

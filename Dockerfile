@@ -83,14 +83,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy package files and install dependencies (--ignore-scripts blocks malicious postinstall hooks)
 COPY package.json package-lock.json ./
-RUN MAKEFLAGS="-j$(nproc)" npm ci --ignore-scripts \
-    && MAKEFLAGS="-j$(nproc)" npm rebuild better-sqlite3 argon2
+RUN MAKEFLAGS="-j$(nproc)" npm ci --ignore-scripts
 
-# Copy source code and build
+# Copy source code and rebuild native modules for target platform
+# Increase Node.js heap size to 4GB for SvelteKit build (arm64 needs more memory)
 COPY . .
 # The message catalogue puts the build close to Node's default heap: it needs over 3 GB
 # at 2168 keys across 6 locales and grows with every locale. Without a limit the build
 # dies as an exit-134 OOM with no useful message, so state the ceiling here.
+RUN MAKEFLAGS="-j$(nproc)" npm rebuild better-sqlite3 argon2
 RUN NODE_OPTIONS=--max-old-space-size=6144 npm run build
 
 # Production dependencies only
