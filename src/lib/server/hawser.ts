@@ -454,11 +454,13 @@ export function handleEdgeConnection(
 		}
 
 		// Immediately destroy TCP socket — no graceful close needed for replaced connections
+		console.log(`[Hawser] About to terminate old connection, keeping new connection`);
 		if (typeof existing.ws.terminate === 'function') {
 			existing.ws.terminate();
 		} else {
 			existing.ws.close(1000, 'Replaced by new connection');
 		}
+		console.log(`[Hawser] Old connection terminated, new connection should remain`);
 
 		// Notify frontend to invalidate its container cache for this environment.
 		// When containers are recreated they get new IDs; stale IDs cause stats
