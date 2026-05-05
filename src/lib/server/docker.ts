@@ -877,32 +877,63 @@ export async function dockerFetch(
 			}
 		}
 
-		// Send request through edge connection
-		try {
-			const edgeResponse = await sendEdgeRequest(
-				config.environmentId,
-				method,
-				path,
-				body,
-				headers,
-				streaming || false,
-				(streaming || path === '/_hawser/compose' || path.endsWith('/prune')) ? 300000 : 30000, // 5 min for streaming/compose/prune, 30s for normal
-				isBinary,
-				fetchOptions.signal ?? undefined
-			);
-			const elapsed = Date.now() - startTime;
-			// Only warn for slow requests, but skip /stats which is expected to be slow (5-10s)
-			if (elapsed > 5000 && !path.includes('/stats')) {
-				console.warn(`[Docker] Edge env ${config.environmentId}: ${method} ${path} took ${elapsed}ms`);
+		// Send request through edge connection with retry logic for connection replacement
+		const maxRetries = 3;
+		let lastError: Error | null = null;
+
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				// Add delay before retry to let new connection stabilize
+				if (attempt > 0) {
+					const delay = 100 * Math.pow(2, attempt - 1); // 100ms, 200ms, 400ms
+					console.log(`[Docker] Edge env ${config.environmentId}: Retry ${attempt}/${maxRetries} for ${method} ${path} after ${delay}ms delay`);
+					await new Promise(resolve => setTimeout(resolve, delay));
+				}
+
+				const edgeResponse = await sendEdgeRequest(
+					config.environmentId,
+					method,
+					path,
+					body,
+					headers,
+					streaming || false,
+					(streaming || path === '/_hawser/compose' || path.endsWith('/prune')) ? 300000 : 30000, // 5 min for streaming/compose/prune, 30s for normal
+					isBinary,
+					fetchOptions.signal ?? undefined
+				);
+				const elapsed = Date.now() - startTime;
+
+				// Log successful retry
+				if (attempt > 0) {
+					console.log(`[Docker] Edge env ${config.environmentId}: ${method} ${path} succeeded on retry ${attempt}/${maxRetries} after ${elapsed}ms`);
+				} else if (elapsed > 5000 && !path.includes('/stats')) {
+					// Only warn for slow requests on first attempt, but skip /stats which is expected to be slow (5-10s)
+					console.warn(`[Docker] Edge env ${config.environmentId}: ${method} ${path} took ${elapsed}ms`);
+				}
+
+				return edgeResponseToResponse(edgeResponse);
+			} catch (error: any) {
+				const elapsed = Date.now() - startTime;
+				lastError = error;
+				const msg = error?.message || String(error);
+
+				// Check if this is a connection replaced error that we should retry
+				const isConnectionReplaced = msg.includes('Connection replaced by new agent');
+
+				if (isConnectionReplaced && attempt < maxRetries) {
+					console.warn(`[Docker] Edge env ${config.environmentId}: ${method} ${path} failed after ${elapsed}ms: ${msg} (will retry)`);
+					// Continue to next iteration for retry
+					continue;
+				}
+
+				// Log final error message only, not full stack trace
+				console.error(`[Docker] Edge env ${config.environmentId}: ${method} ${path} failed after ${elapsed}ms: ${msg}`);
+				throw DockerConnectionError.fromError(error);
 			}
-			return edgeResponseToResponse(edgeResponse);
-		} catch (error: any) {
-			const elapsed = Date.now() - startTime;
-			// Log error message only, not full stack trace
-			const msg = error?.message || String(error);
-			console.error(`[Docker] Edge env ${config.environmentId}: ${method} ${path} failed after ${elapsed}ms: ${msg}`);
-			throw DockerConnectionError.fromError(error);
 		}
+
+		// Should never reach here, but TypeScript needs it
+		throw DockerConnectionError.fromError(lastError || new Error('Unknown error'));
 	}
 
 	if (config.type === 'socket') {
