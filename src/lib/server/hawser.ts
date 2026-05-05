@@ -1198,6 +1198,7 @@ async function handleHawserWsMessage(ws: any, msg: any, connId: string, remoteIp
 					try {
 						ws.send(JSON.stringify({
 							type: 'welcome',
+							environmentId: result.environmentId,
 							serverId: 'dockhand',
 							version: HAWSER_PROTOCOL_VERSION
 						}));
