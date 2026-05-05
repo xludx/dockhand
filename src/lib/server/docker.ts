@@ -285,6 +285,10 @@ const envCache = new Map<number, CachedEnv>();
 // Cache TTL: 30 minutes (in milliseconds)
 const CACHE_TTL = 30 * 60 * 1000;
 
+// Hawser Edge retry configuration (temporary safety net during DERP timeout deployment)
+const HAWSER_EDGE_RETRY_ENABLED = process.env.HAWSER_EDGE_RETRY_ENABLED !== 'false';
+const HAWSER_EDGE_MAX_RETRIES = parseInt(process.env.HAWSER_EDGE_MAX_RETRIES || '3', 10);
+
 // All known Docker Hub hostname variations for credential matching
 const DOCKER_HUB_HOSTS = new Set([
 	'docker.io', 'hub.docker.com', 'registry.hub.docker.com',
@@ -877,8 +881,9 @@ export async function dockerFetch(
 			}
 		}
 
-		// Send request through edge connection with retry logic for connection replacement
-		const maxRetries = 3;
+		// Send request through edge connection with optional retry logic for connection replacement
+		// Retry logic is a temporary safety net during DERP timeout deployment (HAWSER_EDGE_RETRY_ENABLED)
+		const maxRetries = HAWSER_EDGE_RETRY_ENABLED ? HAWSER_EDGE_MAX_RETRIES : 0;
 		let lastError: Error | null = null;
 
 		for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -920,7 +925,7 @@ export async function dockerFetch(
 				// Check if this is a connection replaced error that we should retry
 				const isConnectionReplaced = msg.includes('Connection replaced by new agent');
 
-				if (isConnectionReplaced && attempt < maxRetries) {
+				if (isConnectionReplaced && attempt < maxRetries && HAWSER_EDGE_RETRY_ENABLED) {
 					console.warn(`[Docker] Edge env ${config.environmentId}: ${method} ${path} failed after ${elapsed}ms: ${msg} (will retry)`);
 					// Continue to next iteration for retry
 					continue;
