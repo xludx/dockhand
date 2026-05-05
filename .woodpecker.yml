@@ -41,3 +41,6 @@ steps:
       platforms:
         - linux/amd64
         - linux/arm64
+#
+# Auto-build on custom branch push
+#
