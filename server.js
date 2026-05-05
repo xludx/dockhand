@@ -430,7 +430,12 @@ function handleHawserConnection(ws, connId, remoteIp) {
 
 			// Use the global hawser message handler injected by the SvelteKit app
 			if (typeof globalThis.__hawserHandleMessage === 'function') {
-				await globalThis.__hawserHandleMessage(ws, msg, connId, remoteIp);
+				try {
+					await globalThis.__hawserHandleMessage(ws, msg, connId, remoteIp);
+				} catch (handlerError) {
+					console.error('[Hawser WS] Handler error:', handlerError);
+					// Don't close connection - let it recover
+				}
 			} else {
 				console.warn('[Hawser WS] No global handler registered');
 				ws.send(JSON.stringify({ type: 'error', message: 'Server not ready' }));
