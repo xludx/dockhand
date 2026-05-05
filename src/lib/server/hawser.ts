@@ -488,7 +488,9 @@ export function handleEdgeConnection(
 	edgeConnections.set(environmentId, connection);
 
 	// Start server-side ping interval to keep connection alive.
-	// 5s is conservative against reverse proxies with aggressive idle timeouts.
+	// Configurable via HAWSER_PING_INTERVAL env var (default: 5 seconds).
+	// For DERP relay over high-latency networks, increase to 10-15 seconds.
+	const pingIntervalMs = parseInt(process.env.HAWSER_PING_INTERVAL || '5', 10) * 1000;
 	connection.pingInterval = setInterval(() => {
 		try {
 			connection.ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
@@ -496,7 +498,7 @@ export function handleEdgeConnection(
 			clearInterval(connection.pingInterval!);
 			connection.pingInterval = undefined;
 		}
-	}, 5000);
+	}, pingIntervalMs);
 
 	// Update environment record
 	updateEnvironmentStatus(environmentId, connection);
