@@ -515,8 +515,10 @@ export function handleEdgeConnection(
 
 		// Immediately destroy TCP socket — no graceful close needed for replaced connections
 		console.log(`[Hawser] About to terminate old connection, keeping new connection`);
-		if (typeof existing.ws.terminate === 'function') {
-			existing.ws.terminate();
+		// ws-library method, absent on the standard WebSocket type (runtime-guarded)
+		const replacedWs = existing.ws as unknown as import('ws').WebSocket;
+		if (typeof replacedWs.terminate === 'function') {
+			replacedWs.terminate();
 		} else {
 			existing.ws.close(1000, 'Replaced by new connection');
 		}
